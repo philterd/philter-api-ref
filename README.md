@@ -2,7 +2,7 @@
 
 [Philter](https://www.philterd.ai/philter/) identifies and manipulates sensitive information in text. This project is a reference implementation of Philter's [Filtering API](https://philterd.github.io/philter/api_and_sdks/api/filtering_api.html). This project can be used for testing Philter integrations without requiring an instance of Philter.
 
-**This project is currently a work in progress.**
+Use this repository when you want to develop against Philter's API without standing up an instance of Philter.
 
 ## Build and Run
 
