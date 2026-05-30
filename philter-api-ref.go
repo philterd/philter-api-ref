@@ -20,6 +20,8 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -33,10 +35,29 @@ type Status struct {
 	Version string `json:"version"`
 }
 
+type Span struct {
+	Id             string  `json:"id"`
+	CharacterStart int     `json:"characterStart"`
+	CharacterEnd   int     `json:"characterEnd"`
+	FilterType     string  `json:"filterType"`
+	Context        string  `json:"context"`
+	DocumentId     string  `json:"documentId"`
+	Confidence     float64 `json:"confidence"`
+	Text           string  `json:"text"`
+	Replacement    string  `json:"replacement"`
+	Ignored        bool    `json:"ignored"`
+}
+
+type Explanation struct {
+	AppliedSpans []Span `json:"appliedSpans"`
+	IgnoredSpans []Span `json:"ignoredSpans"`
+}
+
 type Explain struct {
-	FilteredText  string `json:"filteredText"`
-	Context string `json:"context"`
-	DocumentId string `json:"documentI"`
+	FilteredText string      `json:"filteredText"`
+	Context      string      `json:"context"`
+	DocumentId   string      `json:"documentId"`
+	Explanation  Explanation `json:"explanation"`
 }
 
 func main() {
@@ -62,16 +83,80 @@ func filter(w http.ResponseWriter, r *http.Request) {
 
 func explain(w http.ResponseWriter, r *http.Request) {
 
-	params := mux.Vars(r)
-	context := params["context"]
-	documentId := params["documentId"]
+	// The Philter API passes policy, context, and document id as query
+	// parameters: p (policy), c (context), d (document id).
+	query := r.URL.Query()
 
-	explain := Explain{FilteredText: "{{{REDACTED-entity}}} was a patient.", Context: context, DocumentId: documentId}
+	context := query.Get("c")
+	if context == "" {
+		context = "none"
+	}
+
+	documentId := query.Get("d")
+	if documentId == "" {
+		documentId = generateDocumentId()
+	}
+
+	// The policy is accepted for parity with the real API but does not change
+	// this reference response.
+	_ = query.Get("p")
+
+	filteredText := "{{{REDACTED-entity}}} was a patient and his ssn was {{{REDACTED-ssn}}}."
+
+	appliedSpans := []Span{
+		{
+			Id:             generateDocumentId(),
+			CharacterStart: 0,
+			CharacterEnd:   17,
+			FilterType:     "NER_ENTITY",
+			Context:        context,
+			DocumentId:     documentId,
+			Confidence:     0.918,
+			Text:           "George Washington",
+			Replacement:    "{{{REDACTED-entity}}}",
+			Ignored:        false,
+		},
+		{
+			Id:             generateDocumentId(),
+			CharacterStart: 48,
+			CharacterEnd:   59,
+			FilterType:     "SSN",
+			Context:        context,
+			DocumentId:     documentId,
+			Confidence:     1,
+			Text:           "123-45-6789",
+			Replacement:    "{{{REDACTED-ssn}}}",
+			Ignored:        false,
+		},
+	}
+
+	explain := Explain{
+		FilteredText: filteredText,
+		Context:      context,
+		DocumentId:   documentId,
+		Explanation: Explanation{
+			AppliedSpans: appliedSpans,
+			IgnoredSpans: []Span{},
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("x-document-id", documentId)
 
 	if err := json.NewEncoder(w).Encode(explain); err != nil {
 		panic(err)
 	}
 
+}
+
+// generateDocumentId returns a random hex identifier, mirroring the unique
+// document id Philter assigns to each request.
+func generateDocumentId() string {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "00000000000000000000000000000000"
+	}
+	return hex.EncodeToString(b)
 }
 
 func status(w http.ResponseWriter, r *http.Request) {

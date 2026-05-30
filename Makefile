@@ -3,3 +3,6 @@ build:
 
 run:
 	go run philter-api-ref.go
+
+test:
+	go test ./...
